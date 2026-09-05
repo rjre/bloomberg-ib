@@ -12,11 +12,16 @@ IB Connect API reference):
   POST  /ib/v1/chatbot                      - chatbot posts a message to a room
   GET   /ib/v1/chatbot/{chatbot_id}/rooms   - rooms a chatbot is a member of
   POST  /ib/v1/files                        - upload a file (returns a file id)
+
+Every request's JWT is bound to that request's exact method/path/host (see
+ib_connect/auth.py) - the token is minted fresh, right before the call, and
+is not reused.
 """
 from __future__ import annotations
 
 import json
 from typing import Any, Iterator, Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -39,9 +44,11 @@ class IBConnectClient:
         client_secret: str,
         base_url: str = DEFAULT_BASE_URL,
         session: Optional[requests.Session] = None,
+        region: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
-        self.auth = JWTAuth(client_id, client_secret)
+        self.host = urlparse(self.base_url).netloc
+        self.auth = JWTAuth(client_id, client_secret, region=region)
         self.session = session or requests.Session()
 
     # -- internal helpers -------------------------------------------------
@@ -49,8 +56,8 @@ class IBConnectClient:
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
-    def _auth_params(self, extra: Optional[dict] = None) -> dict:
-        params = {"jwt": self.auth.token()}
+    def _auth_params(self, method: str, path: str, extra: Optional[dict] = None) -> dict:
+        params = {"jwt": self.auth.token(method, path, self.host)}
         if extra:
             params.update({k: v for k, v in extra.items() if v is not None})
         return params
@@ -67,12 +74,14 @@ class IBConnectClient:
     # -- health / streams metadata -----------------------------------------
 
     def health_check(self) -> dict:
-        resp = self.session.get(self._url("/ib/v1/check"), params=self._auth_params())
+        path = "/ib/v1/check"
+        resp = self.session.get(self._url(path), params=self._auth_params("GET", path))
         self._raise_for_status(resp)
         return resp.json() if resp.content else {}
 
     def list_streams(self) -> dict:
-        resp = self.session.get(self._url("/ib/v1/streams"), params=self._auth_params())
+        path = "/ib/v1/streams"
+        resp = self.session.get(self._url(path), params=self._auth_params("GET", path))
         self._raise_for_status(resp)
         return resp.json()
 
@@ -95,16 +104,19 @@ class IBConnectClient:
         reconnect after a drop can resume with `backfill_id=...` (see
         docs/REFERENCE.md, Backfill and Replay).
         """
+        path = f"/ib/v1/streams/{stream_id}"
         params = self._auth_params(
+            "GET",
+            path,
             {
                 "sendContentEvents": send_content_events,
                 "sendIdeaDrawerFeedbackEvents": send_idea_drawer_feedback_events,
                 "sendRoomMembershipEvents": send_room_membership_events,
                 "backfillId": backfill_id,
-            }
+            },
         )
         with self.session.get(
-            self._url(f"/ib/v1/streams/{stream_id}"),
+            self._url(path),
             params=params,
             stream=True,
             timeout=chunk_timeout,
@@ -120,18 +132,20 @@ class IBConnectClient:
 
     def post_suggestion(self, stream_id: str, payload: dict) -> dict:
         """Post an IDEA / UIDEA / RETRACT_SUGGESTION to a stream (Idea Drawer)."""
+        path = f"/ib/v1/streams/{stream_id}"
         resp = self.session.post(
-            self._url(f"/ib/v1/streams/{stream_id}"),
-            params=self._auth_params(),
+            self._url(path),
+            params=self._auth_params("POST", path),
             json=payload,
         )
         self._raise_for_status(resp)
         return resp.json() if resp.content else {}
 
     def patch_suggestion(self, stream_id: str, payload: dict) -> dict:
+        path = f"/ib/v1/streams/{stream_id}"
         resp = self.session.patch(
-            self._url(f"/ib/v1/streams/{stream_id}"),
-            params=self._auth_params(),
+            self._url(path),
+            params=self._auth_params("PATCH", path),
             json=payload,
         )
         self._raise_for_status(resp)
@@ -140,9 +154,10 @@ class IBConnectClient:
     # -- chat initiation ------------------------------------------------------
 
     def initiate_chat(self, payload: dict) -> dict:
+        path = "/ib/v1/initiateChat"
         resp = self.session.post(
-            self._url("/ib/v1/initiateChat"),
-            params=self._auth_params(),
+            self._url(path),
+            params=self._auth_params("POST", path),
             json=payload,
         )
         self._raise_for_status(resp)
@@ -151,30 +166,30 @@ class IBConnectClient:
     # -- chatbots -------------------------------------------------------------
 
     def post_chatbot_message(self, payload: dict) -> dict:
+        path = "/ib/v1/chatbot"
         resp = self.session.post(
-            self._url("/ib/v1/chatbot"),
-            params=self._auth_params(),
+            self._url(path),
+            params=self._auth_params("POST", path),
             json=payload,
         )
         self._raise_for_status(resp)
         return resp.json() if resp.content else {}
 
     def get_chatbot_rooms(self, chatbot_id: int) -> dict:
-        resp = self.session.get(
-            self._url(f"/ib/v1/chatbot/{chatbot_id}/rooms"),
-            params=self._auth_params(),
-        )
+        path = f"/ib/v1/chatbot/{chatbot_id}/rooms"
+        resp = self.session.get(self._url(path), params=self._auth_params("GET", path))
         self._raise_for_status(resp)
         return resp.json()
 
     # -- file uploads (used for Market Commentary title images, attachments) --
 
     def upload_file(self, file_path: str, mime_type: Optional[str] = None) -> dict:
+        path = "/ib/v1/files"
         with open(file_path, "rb") as fh:
             files = {"file": (file_path, fh, mime_type)} if mime_type else {"file": fh}
             resp = self.session.post(
-                self._url("/ib/v1/files"),
-                params=self._auth_params(),
+                self._url(path),
+                params=self._auth_params("POST", path),
                 files=files,
             )
         self._raise_for_status(resp)

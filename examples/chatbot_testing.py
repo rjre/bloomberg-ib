@@ -64,5 +64,7 @@ if __name__ == "__main__":
         raise SystemExit(
             "Set IB_CONNECT_STREAM_ID and IB_CONNECT_CHATBOT_UUID in your .env before running this."
         )
-    client = IBConnectClient(settings.client_id, settings.client_secret, settings.base_url)
+    client = IBConnectClient(
+        settings.client_id, settings.client_secret, settings.base_url, region=settings.region
+    )
     run(client, settings.stream_id, settings.chatbot_uuid)

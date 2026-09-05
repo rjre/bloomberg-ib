@@ -114,7 +114,9 @@ def order_update_message() -> dict:
 
 if __name__ == "__main__":
     settings = load_settings()
-    client = IBConnectClient(settings.client_id, settings.client_secret, settings.base_url)
+    client = IBConnectClient(
+        settings.client_id, settings.client_secret, settings.base_url, region=settings.region
+    )
 
     post(client, plain_text_message())
     post(client, link_and_mention_message())

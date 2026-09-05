@@ -38,7 +38,9 @@ def handle_event(event: dict) -> None:
 
 def run(stream_id: str) -> None:
     settings = load_settings()
-    client = IBConnectClient(settings.client_id, settings.client_secret, settings.base_url)
+    client = IBConnectClient(
+        settings.client_id, settings.client_secret, settings.base_url, region=settings.region
+    )
 
     backfill_id = None
     while True:

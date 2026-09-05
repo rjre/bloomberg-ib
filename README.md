@@ -72,14 +72,35 @@ for event in client.read_stream("<stream_id>"):
     ...  # CONTENT_EVENT, ADDITIONAL_ENRICHMENTS_EVENT, JOIN_ROOM_EVENT, ...
 ```
 
-## Known gap: JWT claim shape
+## JWT claim shape
 
-IB Connect requires a JWT signed with your `clientId`/`clientSecret` on every request. Bloomberg's
-own sample repo documents the exact required claims in `jwt.md` / `authentication_service_mode.md`,
-which weren't part of the docs this project was generated from. `ib_connect/auth.py` implements a
-reasonable default (`iss`/`sub` = clientId, short-lived `exp`, HS256) — verify it against
-Bloomberg's sample code or your Bloomberg representative before relying on it, and adjust
-`JWTAuth.build_claims()` if the real claim set differs.
+IB Connect requires a JWT signed with your `clientId`/`clientSecret` on every request, one token
+per request. Bloomberg's own sample repo for this (`jwt.md` / `authentication_service_mode.md`)
+sits behind a console.bloomberg.com / blpprofessional.com login this project couldn't reach, so
+`ib_connect/auth.py` was cross-checked instead against two independent public sources describing
+the same underlying "Bloomberg Web API" JWT scheme (IB Connect shares its credential flow and
+"Web API Connectivity policy" doc with Bloomberg's other Web API products):
+
+- [SAP Cloud Integration's Bloomberg JWT auth blog](https://blogs.sap.com/2022/07/28/sap-cloud-integration-bloomberg-api-integration-using-jwt-oauth-authentication./) —
+  working Groovy reference implementation, plus real "invalid path parameter" errors from
+  production traffic against this API family.
+- Bloomberg's own `beap_lib.beap_auth` Python package (`Credentials`, `BEAPAdapter`), as consumed
+  by the open-source [QF-Lib project](https://qf-lib.readthedocs.io/en/v2.2/_modules/qf_lib/data_providers/bloomberg_beap_hapi/bloomberg_beap_hapi_data_provider.html)
+  against the same `https://api.bloomberg.com` host.
+
+Confirmed and implemented: claim set `{iat, exp, nbf, iss, method, path, host, request_id}`, where
+`method`/`path`/`host` describe the exact request the token is for (a mismatch is rejected as
+"invalid path parameter"), `host` excludes the scheme, `path` excludes host/query string, tokens
+are short-lived (30s) and single-use, and signing is HMAC-SHA256 with the `clientSecret`
+**hex-decoded to raw bytes** (not the hex string itself). `IBConnectClient` mints a fresh token
+bound to each request automatically — you don't need to touch this.
+
+**Still unconfirmed for IB Connect specifically:** the `region` claim. It's part of the shared
+scheme per the sources above, but nothing reachable states what value (or whether one at all) IB
+Connect expects, since its docs only ever show a single `api.bloomberg.com` host. Left optional —
+set `IB_CONNECT_REGION` only if your Bloomberg representative confirms it's required.
+
+Sanity-check all of this with a real `client.health_check()` call before relying on it.
 
 ## Security
 

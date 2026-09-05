@@ -24,6 +24,7 @@ class Settings:
     base_url: str
     stream_id: Optional[str] = None
     chatbot_uuid: Optional[int] = None
+    region: Optional[str] = None
 
 
 def load_settings() -> Settings:
@@ -42,4 +43,7 @@ def load_settings() -> Settings:
         base_url=os.environ.get("IB_CONNECT_BASE_URL", "https://api.bloomberg.com"),
         stream_id=os.environ.get("IB_CONNECT_STREAM_ID"),
         chatbot_uuid=int(chatbot_uuid) if chatbot_uuid else None,
+        # Unconfirmed for IB Connect - see ib_connect/auth.py. Only set
+        # IB_CONNECT_REGION if your Bloomberg representative tells you to.
+        region=os.environ.get("IB_CONNECT_REGION"),
     )
