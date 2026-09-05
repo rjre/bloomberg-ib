@@ -60,13 +60,10 @@ shapes.
 - HTTPS only, TLS 1.2+, IP allowlisting (Enterprise Console).
 - Every request carries a JWT signed with your `clientId`/`clientSecret` (from
   console.bloomberg.com > Connectivity > Web API > Monitor and Manage). One token per request.
-  `ib_connect/auth.py` implements claims `{iat, exp, nbf, iss, method, path, host, request_id}`
-  (`region` optional, unconfirmed for IB Connect), HMAC-SHA256 signed with the hex-decoded
-  `clientSecret` — cross-checked against SAP's public Bloomberg JWT integration blog and
-  Bloomberg's own `beap_lib.beap_auth` package (via QF-Lib), since Bloomberg's own `jwt.md` sample
-  sits behind a console.bloomberg.com login this project couldn't reach. See README.md "JWT claim
-  shape" for sources and the remaining gap; sanity-check with `health_check()` before depending on
-  this in production.
+  `ib_connect/auth.py` implements claims `{iss, exp, nbf, iat, region, method, path, host, jti}`
+  (`region` always `"default"`), HMAC-SHA256 signed with the hex-decoded `clientSecret`, transcribed
+  directly from Bloomberg's own `jwt.md`/`common.py` in the IB Connect sample code downloads. See
+  README.md "JWT claim shape" for the exact fields.
 - Streams are long-lived HTTP connections with heartbeats; you own reconnect logic. Use
   `backfillId` (from the last event received) to resume after a disconnect of up to 5 minutes —
   older backfill IDs return HTTP 410, invalid ones HTTP 400.

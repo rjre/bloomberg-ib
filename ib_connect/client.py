@@ -4,6 +4,7 @@ Endpoints implemented here mirror docs/openapi.json (Bloomberg's published
 IB Connect API reference):
 
   GET   /ib/v1/check                       - health check
+  GET   /ib/v1/documentation.json          - the API's own live OpenAPI schema
   GET   /ib/v1/streams                      - list stream ids available to your firm
   GET   /ib/v1/streams/{stream_id}          - subscribe to a stream (long-lived, streamed)
   POST  /ib/v1/streams/{stream_id}          - post a suggestion (IDEA / UIDEA / RETRACT_SUGGESTION)
@@ -21,7 +22,6 @@ from __future__ import annotations
 
 import json
 from typing import Any, Iterator, Optional
-from urllib.parse import urlparse
 
 import requests
 
@@ -44,11 +44,9 @@ class IBConnectClient:
         client_secret: str,
         base_url: str = DEFAULT_BASE_URL,
         session: Optional[requests.Session] = None,
-        region: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
-        self.host = urlparse(self.base_url).netloc
-        self.auth = JWTAuth(client_id, client_secret, region=region)
+        self.auth = JWTAuth(client_id, client_secret)
         self.session = session or requests.Session()
 
     # -- internal helpers -------------------------------------------------
@@ -57,7 +55,9 @@ class IBConnectClient:
         return f"{self.base_url}{path}"
 
     def _auth_params(self, method: str, path: str, extra: Optional[dict] = None) -> dict:
-        params = {"jwt": self.auth.token(method, path, self.host)}
+        # `host` claim is the full base URL including scheme, matching
+        # Bloomberg's own sample code (see ib_connect/auth.py).
+        params = {"jwt": self.auth.token(method, path, self.base_url)}
         if extra:
             params.update({k: v for k, v in extra.items() if v is not None})
         return params
@@ -78,6 +78,15 @@ class IBConnectClient:
         resp = self.session.get(self._url(path), params=self._auth_params("GET", path))
         self._raise_for_status(resp)
         return resp.json() if resp.content else {}
+
+    def get_documentation(self) -> dict:
+        """The API serves its own OpenAPI schema at this path (per Bloomberg's
+        own `example_documentation.py` sample) - a live alternative/cross-check
+        to docs/openapi.json."""
+        path = "/ib/v1/documentation.json"
+        resp = self.session.get(self._url(path), params=self._auth_params("GET", path))
+        self._raise_for_status(resp)
+        return resp.json()
 
     def list_streams(self) -> dict:
         path = "/ib/v1/streams"

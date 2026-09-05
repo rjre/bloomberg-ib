@@ -27,8 +27,6 @@ def make_payload() -> dict:
 
 if __name__ == "__main__":
     settings = load_settings()
-    client = IBConnectClient(
-        settings.client_id, settings.client_secret, settings.base_url, region=settings.region
-    )
+    client = IBConnectClient(settings.client_id, settings.client_secret, settings.base_url)
     result = client.initiate_chat(make_payload())
     log.info("initiateChat response: %s", result)
